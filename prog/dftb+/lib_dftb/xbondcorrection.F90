@@ -9,6 +9,7 @@
 
 !> Halogen bond correction for DFTB3 - additional repulsive potential applied to Cl,Br,I - O,N
 !> pairs. See http://dx.doi.org/10.1021/ct5009137 for details
+
 module xbondcorrection
   use accuracy
   use constants
@@ -27,42 +28,40 @@ module xbondcorrection
     ! Matrix of pairwise parameters between species
     real(dp), allocatable :: xbPairParams(:,:)
 
-    ! Matrix of sums of covalent radii
+    ! Van der Waals radii of the species
     real(dp), allocatable :: xbSpeciesRadii(:)
 
     !> Calculated correction to energy
     real(dp) :: xbEnergy
 
+    !> Derivatives of the correction energy
+    real(dp), allocatable :: xbDerivs(:,:)
+
   contains
 
     procedure :: updateCoords
     procedure :: calcXBEnergy
+    procedure :: addGradients
 
   end type XBCorr
 
-  !> Global parameters (original values from http://dx.doi.org/10.1021/ct5009137
+  !> Parameters (original values from http://dx.doi.org/10.1021/ct5009137
   !> in Angstrom and kcal/mol unit system converted to a.u.)
+
+  !> Global parameters
   real(dp), parameter :: xbGlobalC1 = 7.761_dp * kcal_mol__Hartree
   real(dp), parameter :: xbGlobalC3 = 4.518_dp ! Dimensionless
   real(dp), parameter :: xbGlobalC2 = 0.050_dp * (1.0_dp / AA__Bohr)**xbGlobalC3
   real(dp), parameter :: xbRCut0 = 0.7_dp ! Dimensionless
   real(dp), parameter :: xbRCut1 = 0.8_dp ! Dimensionless
  
-  !> Pairwise parameters (in Angstrom, converted to Bohrs)
+  !> Pairwise parameters
   real(dp), parameter :: xbParamOCl = 1.237_dp * AA__Bohr
   real(dp), parameter :: xbParamOBr = 1.099_dp * AA__Bohr
   real(dp), parameter :: xbParamOI = 1.313_dp * AA__Bohr
   real(dp), parameter :: xbParamNCl = 1.526_dp * AA__Bohr
   real(dp), parameter :: xbParamNBr = 1.349_dp * AA__Bohr
   real(dp), parameter :: xbParamNI = 1.521_dp * AA__Bohr
-
-  !> vdW radii used (in Angstrom, converted to Bohrs)
-  real(dp), parameter :: xbRadiusO = 1.52_dp * AA__Bohr
-  real(dp), parameter :: xbRadiusN = 1.55_dp * AA__Bohr
-  real(dp), parameter :: xbRadiusCl = 1.75_dp * AA__Bohr
-  real(dp), parameter :: xbRadiusBr = 1.85_dp * AA__Bohr
-  real(dp), parameter :: xbRadiusI = 1.98_dp * AA__Bohr
-
 
 contains
 
@@ -78,13 +77,13 @@ contains
     integer :: iSp1, iSp2
     character(mc) :: spName1, spName2
 
-    ! Allocate matrix of parameters
+    ! Build a matrix of pairwise parameters
     nSpecies = size(speciesNames)
     allocate(this%xbPairParams(nSpecies, nSpecies))
     allocate(this%xbSpeciesRadii(nSpecies))
     ! Fill with -1 (no correction applied)
     this%xbPairParams(:,:) = -1.0_dp
-    ! Copy pairwise parameters
+    ! Copy pairwise parameters for current system
     do iSp1 = 1, size(speciesNames)
       do iSp2 = 1, size(speciesNames)
         spName1 = speciesNames(iSp1)
@@ -117,40 +116,13 @@ contains
         end if
       end do
     end do
+
     ! Copy species radii
-    write (stdout, *) "Radii:"
+    ! I have checked that the radii in DFTB+'s database match my radii
+    ! for all the elements used
     do iSp1 = 1, size(speciesNames)
-      write (stdout, *) speciesNames(iSp1)
       call getVdwData(speciesNames(iSp1), this%xbSpeciesRadii(iSp1))
-      write (stdout, *) this%xbSpeciesRadii(iSp1)
-
-      select case (speciesNames(iSp1))
-      case ("O")
-        this%xbSpeciesRadii(iSp1) = xbRadiusO
-      case ("N")
-        this%xbSpeciesRadii(iSp1) = xbRadiusN
-      case ("Cl")
-        this%xbSpeciesRadii(iSp1) = xbRadiusCl
-      case ("Br")
-        this%xbSpeciesRadii(iSp1) = xbRadiusBr
-      case ("I")
-        this%xbSpeciesRadii(iSp1) = xbRadiusI
-      end select
-      write (stdout, *) this%xbSpeciesRadii(iSp1)
     end do
-
-    ! Printing of parameters, for debugging only
-    if (.false.) then
-      write (stdout, *) "Initializing X-bond correction, parameter matrix:"
-      do iSp1 = 1, size(speciesNames)
-        do iSp2 = 1, size(speciesNames)
-          spName1 = speciesNames(iSp1)
-          spName2 = speciesNames(iSp2)
-          write (stdout, *) trim(spName1) // "-" // trim(spName2) // " = ", this%xbPairParams(iSp1,iSp2)
-        end do
-      end do
-      write (stdout, *)
-    end if
 
   end subroutine XBCorr_init
 
@@ -167,10 +139,17 @@ contains
     integer, allocatable, intent(in) :: species(:)
 
     integer :: nAtom, i, j
-    real(dp) :: vect(3), r, r_vdw, energy, r0, r1, sw, x, erep, erep0
+    real(dp) :: vect(3), r, r_vdw, energy, r0, r1, sw, x, d, erep, erep0
+    real(dp) :: dsw_dr
 
     ! Get no. of atoms
     nAtom = size(coords, dim=2)
+
+    ! Alllocate and reset the derivatives
+    if (.not. allocated(this%xbDerivs)) then
+      allocate(this%xbDerivs(3,nAtom))
+    end if
+    this%xbDerivs(:,:) = 0.0_dp
    
     ! Iterate all pairs of atoms 
     energy = 0.0_dp
@@ -198,11 +177,17 @@ contains
         end if
         ! Calculate current and cutoff values
         ! the max(...,0) is added to the original implementation to allow secure calculation at short distances
-        erep = xbGlobalC1 * exp(-xbGlobalC2 * max(r - this%xbPairParams(species(i),species(j)),0.0_dp)**xbGlobalC3)
-        erep0 = xbGlobalC1 * exp(-xbGlobalC2 * max(r0 - this%xbPairParams(species(i),species(j)),0.0_dp)**xbGlobalC3)
+        d = this%xbPairParams(species(i),species(j))
+        erep = xbGlobalC1 * exp(-xbGlobalC2 * max(r - d, 0.0_dp)**xbGlobalC3)
+        erep0 = xbGlobalC1 * exp(-xbGlobalC2 * max(r0 - d, 0.0_dp)**xbGlobalC3)
         ! Apply the switching function
         erep = erep * sw + erep0 * (1.0_dp - sw)
         energy = energy + erep
+        ! gradient
+        dsw_dr = 0.0_dp
+        if (r > r0 .and. r < r1) then
+          dsw_dr = -140.0_dp * x**6 + 420.0_dp * x**5 - 420.0_dp * x**4 + 140.0_dp * x**3
+        end if
       end do
     end do
     ! Save calculated energy
@@ -213,9 +198,22 @@ contains
   subroutine calcXBEnergy(this, energy)
     !> instance of the correction
     class(XBCorr), intent(inout) :: this
+
     !> Energy to be corrected
     real(dp), intent(inout) :: energy
 
     energy = energy + this%xbEnergy
   end subroutine calcXBEnergy
+
+  subroutine addGradients(this, derivs)
+    !> instance of the correction
+    class(XBCorr), intent(inout) :: this
+
+    !> Derivatives to be modified
+    real(dp), intent(inout) :: derivs(:,:)
+
+    derivs = derivs + this%xbDerivs
+
+  end subroutine addGradients
+
 end module xbondcorrection

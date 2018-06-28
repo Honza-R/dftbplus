@@ -201,6 +201,7 @@ contains
       end if
 
       if (tLatticeChanged) then
+        !TBD XBond correction should be recalculated here as well
         call handleLatticeChange(latVec, sccCalc, tStress, extPressure, mCutOff, dispersion,&
             & recVec, invLatVec, cellVol, recCellVol, extLatDerivs, cellVec, rCellVec)
       end if
@@ -234,6 +235,7 @@ contains
         call calcDispersionEnergy(dispersion, energy%atomDisp, energy%Edisp)
       end if
 
+      !TBD - for now, i'm adding the correction to ERep, but a separate energy component would be better
       if (allocated(pXBCorrection)) then
         call pXBCorrection%calcXBEnergy(energy%ERep)
       end if
@@ -404,7 +406,7 @@ contains
         call getGradients(env, sccCalc, tEField, tXlbomd, nonSccDeriv, Efield, rhoPrim, ERhoPrim,&
             & qOutput, q0, skHamCont, skOverCont, pRepCont, neighbourList, nNeighbourSK,&
             & nNeighbourRep, species, img2CentCell, iSparseStart, orb, potential, coord, derivs,&
-            & iRhoPrim, thirdOrd, chrgForces, dispersion)
+            & iRhoPrim, thirdOrd, chrgForces, dispersion, pXBCorrection)
         if (tLinResp) then
           derivs(:,:) = derivs + excitedDerivs
         end if
@@ -3884,7 +3886,7 @@ contains
   subroutine getGradients(env, sccCalc, tEField, tXlbomd, nonSccDeriv, Efield, rhoPrim, ERhoPrim,&
       & qOutput, q0, skHamCont, skOverCont, pRepCont, neighbourList, nNeighbourSK, nNeighbourRep,&
       & species, img2CentCell, iSparseStart, orb, potential, coord, derivs, iRhoPrim, thirdOrd,&
-      & chrgForces, dispersion)
+      & chrgForces, dispersion, corrXB)
 
     !> Environment settings
     type(TEnvironment), intent(in) :: env
@@ -3967,6 +3969,9 @@ contains
     !> dispersion interactions
     class(DispersionIface), intent(inout), allocatable :: dispersion
 
+    !> X-bond correction
+    type(XBCorr), allocatable, intent(inout) :: corrXB
+
     real(dp), allocatable :: tmpDerivs(:,:)
     logical :: tImHam, tExtChrg, tSccCalc
     integer :: nAtom
@@ -4036,6 +4041,10 @@ contains
 
     if (allocated(dispersion)) then
       call dispersion%addGradients(derivs)
+    end if
+
+    if (allocated(corrXB)) then
+      call corrXB%addGradients(derivs)
     end if
 
     allocate(tmpDerivs(3, nAtom))
