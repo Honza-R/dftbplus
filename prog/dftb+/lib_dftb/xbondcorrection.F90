@@ -39,27 +39,28 @@ module xbondcorrection
 
   end type XBCorr
 
-  !> Global parameters (in Angstrom and kcal/mol unit system)
-  real(dp), parameter :: xbGlobalC1 = 7.761_dp
-  real(dp), parameter :: xbGlobalC2 = 0.050_dp
-  real(dp), parameter :: xbGlobalC3 = 4.518_dp
-  real(dp), parameter :: xbRCut0 = 0.7_dp
-  real(dp), parameter :: xbRCut1 = 0.8_dp
+  !> Global parameters (original values from http://dx.doi.org/10.1021/ct5009137
+  !> in Angstrom and kcal/mol unit system converted to a.u.)
+  real(dp), parameter :: xbGlobalC1 = 7.761_dp * kcal_mol__Hartree
+  real(dp), parameter :: xbGlobalC3 = 4.518_dp ! Dimensionless
+  real(dp), parameter :: xbGlobalC2 = 0.050_dp * (1.0_dp / AA__Bohr)**xbGlobalC3
+  real(dp), parameter :: xbRCut0 = 0.7_dp ! Dimensionless
+  real(dp), parameter :: xbRCut1 = 0.8_dp ! Dimensionless
  
-  !> Pairwise parameters (in Angstrom)
-  real(dp), parameter :: xbParamOCl = 1.237_dp
-  real(dp), parameter :: xbParamOBr = 1.099_dp
-  real(dp), parameter :: xbParamOI = 1.313_dp
-  real(dp), parameter :: xbParamNCl = 1.526_dp
-  real(dp), parameter :: xbParamNBr = 1.349_dp
-  real(dp), parameter :: xbParamNI = 1.521_dp
+  !> Pairwise parameters (in Angstrom, converted to Bohrs)
+  real(dp), parameter :: xbParamOCl = 1.237_dp * AA__Bohr
+  real(dp), parameter :: xbParamOBr = 1.099_dp * AA__Bohr
+  real(dp), parameter :: xbParamOI = 1.313_dp * AA__Bohr
+  real(dp), parameter :: xbParamNCl = 1.526_dp * AA__Bohr
+  real(dp), parameter :: xbParamNBr = 1.349_dp * AA__Bohr
+  real(dp), parameter :: xbParamNI = 1.521_dp * AA__Bohr
 
-  !> vdW radii used (in Angstrom)
-  real(dp), parameter :: xbRadiusO = 0.73_dp
-  real(dp), parameter :: xbRadiusN = 0.75_dp
-  real(dp), parameter :: xbRadiusCl = 0.99_dp
-  real(dp), parameter :: xbRadiusBr = 1.14_dp
-  real(dp), parameter :: xbRadiusI = 1.33_dp
+  !> vdW radii used (in Angstrom, converted to Bohrs)
+  real(dp), parameter :: xbRadiusO = 0.73_dp * AA__Bohr
+  real(dp), parameter :: xbRadiusN = 0.75_dp * AA__Bohr
+  real(dp), parameter :: xbRadiusCl = 0.99_dp * AA__Bohr
+  real(dp), parameter :: xbRadiusBr = 1.14_dp * AA__Bohr
+  real(dp), parameter :: xbRadiusI = 1.33_dp * AA__Bohr
 
 
 contains
@@ -174,7 +175,7 @@ contains
         end if
         ! Calculate interatomic vector and distance
         vect(:) = coords(:,i) - coords(:,j)
-        r = sqrt(sum(vect**2)) * Bohr__AA
+        r = sqrt(sum(vect**2))
         ! Sum of vdW radii
         r_vdw = this%xbSpeciesRadii(species(i)) + this%xbSpeciesRadii(species(j))
         ! Switching function
@@ -197,8 +198,8 @@ contains
         energy = energy + erep
       end do
     end do
-    ! Save calculated energy, converted to a.u.
-    this%xbEnergy = energy * kcal_mol__Hartree
+    ! Save calculated energy
+    this%xbEnergy = energy
   end subroutine updateCoords
 
   !> Get the calculated energy and apply it to the results
