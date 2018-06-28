@@ -12,6 +12,7 @@
 module xbondcorrection
   use accuracy
   use constants
+  use vdwdata
   use io
   use message, only : warning
   implicit none
@@ -56,11 +57,11 @@ module xbondcorrection
   real(dp), parameter :: xbParamNI = 1.521_dp * AA__Bohr
 
   !> vdW radii used (in Angstrom, converted to Bohrs)
-  real(dp), parameter :: xbRadiusO = 0.73_dp * AA__Bohr
-  real(dp), parameter :: xbRadiusN = 0.75_dp * AA__Bohr
-  real(dp), parameter :: xbRadiusCl = 0.99_dp * AA__Bohr
-  real(dp), parameter :: xbRadiusBr = 1.14_dp * AA__Bohr
-  real(dp), parameter :: xbRadiusI = 1.33_dp * AA__Bohr
+  real(dp), parameter :: xbRadiusO = 1.52_dp * AA__Bohr
+  real(dp), parameter :: xbRadiusN = 1.55_dp * AA__Bohr
+  real(dp), parameter :: xbRadiusCl = 1.75_dp * AA__Bohr
+  real(dp), parameter :: xbRadiusBr = 1.85_dp * AA__Bohr
+  real(dp), parameter :: xbRadiusI = 1.98_dp * AA__Bohr
 
 
 contains
@@ -117,8 +118,13 @@ contains
       end do
     end do
     ! Copy species radii
+    write (stdout, *) "Radii:"
     do iSp1 = 1, size(speciesNames)
-    select case (speciesNames(iSp1))
+      write (stdout, *) speciesNames(iSp1)
+      call getVdwData(speciesNames(iSp1), this%xbSpeciesRadii(iSp1))
+      write (stdout, *) this%xbSpeciesRadii(iSp1)
+
+      select case (speciesNames(iSp1))
       case ("O")
         this%xbSpeciesRadii(iSp1) = xbRadiusO
       case ("N")
@@ -130,6 +136,7 @@ contains
       case ("I")
         this%xbSpeciesRadii(iSp1) = xbRadiusI
       end select
+      write (stdout, *) this%xbSpeciesRadii(iSp1)
     end do
 
     ! Printing of parameters, for debugging only
