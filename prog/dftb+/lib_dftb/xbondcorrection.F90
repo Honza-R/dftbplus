@@ -138,9 +138,9 @@ contains
     !> Species of atoms
     integer, allocatable, intent(in) :: species(:)
 
-    integer :: nAtom, i, j
+    integer :: nAtom, i, j, k
     real(dp) :: vect(3), r, r_vdw, energy, r0, r1, sw, x, d, erep, erep0
-    real(dp) :: dsw_dr
+    real(dp) :: dsw_dr, de_dr, cart_deriv(3)
 
     ! Get no. of atoms
     nAtom = size(coords, dim=2)
@@ -176,18 +176,26 @@ contains
           sw = -20.0_dp * x**7 + 70.0_dp * x**6 - 84.0_dp * x**5 + 35.0_dp * x**4
         end if
         ! Calculate current and cutoff values
-        ! the max(...,0) is added to the original implementation to allow secure calculation at short distances
         d = this%xbPairParams(species(i),species(j))
-        erep = xbGlobalC1 * exp(-xbGlobalC2 * max(r - d, 0.0_dp)**xbGlobalC3)
-        erep0 = xbGlobalC1 * exp(-xbGlobalC2 * max(r0 - d, 0.0_dp)**xbGlobalC3)
+        erep = xbGlobalC1 * exp(-xbGlobalC2 * (r - d)**xbGlobalC3)
+        erep0 = xbGlobalC1 * exp(-xbGlobalC2 * (r0 - d)**xbGlobalC3)
         ! Apply the switching function
         erep = erep * sw + erep0 * (1.0_dp - sw)
         energy = energy + erep
-        ! gradient
+
+        ! Gradient
         dsw_dr = 0.0_dp
         if (r > r0 .and. r < r1) then
           dsw_dr = -140.0_dp * x**6 + 420.0_dp * x**5 - 420.0_dp * x**4 + 140.0_dp * x**3
         end if
+        de_dr = -1.0_dp * xbGlobalC2 * xbGlobalC3 * (r - d)**(xbGlobalC3 - 1.0_dp) * erep
+        de_dr = sw * de_dr + dsw_dr * erep + dsw_dr * erep0
+        ! Convert gradient co cartesian and add it to the complete gradient
+        cart_deriv = vect * (de_dr/r)
+        do k = 1, 3
+          this%xbDerivs(k,i) = this%xbDerivs(k,i) + cart_deriv(k)
+          this%xbDerivs(k,j) = this%xbDerivs(k,j) - cart_deriv(k)
+        end do
       end do
     end do
     ! Save calculated energy
