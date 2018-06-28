@@ -133,6 +133,11 @@ h5correction.o = h5correction.o $(_mod_vdwdata) $(common.fypp) $(_mod_accuracy) 
 _mod_h5correction: h5correction.o
 _mod_h5correction = $(h5correction.o)
 
+xbondcorrection.o: common.fypp _mod_accuracy _mod_message
+xbondcorrection.o = xbondcorrection.o $(common.fypp) $(_mod_accuracy) $(_mod_message)
+_mod_xbondcorrection: xbondcorrection.o
+_mod_xbondcorrection = $(xbondcorrection.o)
+
 nonscc.o: _mod_commontypes common.fypp _mod_schedule _mod_message _mod_environment _mod_assert _mod_sk _mod_accuracy _mod_slakocont
 nonscc.o = nonscc.o $(_mod_commontypes) $(common.fypp) $(_mod_schedule) $(_mod_message) $(_mod_environment) $(_mod_assert) $(_mod_sk) $(_mod_accuracy) $(_mod_slakocont)
 _mod_nonscc: nonscc.o

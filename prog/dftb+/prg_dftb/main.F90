@@ -57,6 +57,7 @@ module main
   use mainio
   use commontypes
   use dispersions, only : DispersionIface
+  use xbondcorrection
   use xmlf90
   use thirdorder_module, only : ThirdOrder
   use simplealgebra
@@ -206,7 +207,7 @@ contains
 
       if (tCoordsChanged) then
         call handleCoordinateChange(env, coord0, latVec, invLatVec, species0, mCutoff, repCutoff,&
-            & skCutoff, orb, tPeriodic, sccCalc, dispersion, thirdOrd, img2CentCell, iCellVec,&
+            & skCutoff, orb, tPeriodic, sccCalc, dispersion, pXBCorrection, thirdOrd, img2CentCell, iCellVec,&
             & neighbourList, nAllAtom, coord0Fold, coord, species, rCellVec, nAllOrb, nNeighbourSK,&
             & nNeighbourRep, ham, over, H0, rhoPrim, iRhoPrim, iHam, ERhoPrim, iSparseStart)
       end if
@@ -231,6 +232,10 @@ contains
 
       if (tDispersion) then
         call calcDispersionEnergy(dispersion, energy%atomDisp, energy%Edisp)
+      end if
+
+      if (allocated(pXBCorrection)) then
+        call pXBCorrection%calcXBEnergy(energy%ERep)
       end if
 
       call resetExternalPotentials(potential)
@@ -782,7 +787,7 @@ contains
 
   !> Does the operations that are necessary after atomic coordinates change
   subroutine handleCoordinateChange(env, coord0, latVec, invLatVec, species0, mCutOff, repCutOff,&
-      & skCutOff, orb, tPeriodic, sccCalc, dispersion, thirdOrd, img2CentCell, iCellVec,&
+      & skCutOff, orb, tPeriodic, sccCalc, dispersion, corrXB, thirdOrd, img2CentCell, iCellVec,&
       & neighbourList, nAllAtom, coord0Fold, coord, species, rCellVec, nAllOrb, nNeighbourSK,&
       & nNeighbourRep, ham, over, H0, rhoPrim, iRhoPrim, iHam, ERhoPrim, iSparseStart)
 
@@ -821,6 +826,9 @@ contains
 
     !> Dispersion interactions
     class(DispersionIface), allocatable, intent(inout) :: dispersion
+
+    !> X-bond correction
+    type(XBCorr), allocatable, intent(inout) :: corrXB
 
     !> Third order SCC interactions
     type(ThirdOrder), allocatable, intent(inout) :: thirdOrd
@@ -909,6 +917,9 @@ contains
     end if
     if (allocated(dispersion)) then
       call dispersion%updateCoords(neighbourList, img2CentCell, coord, species0)
+    end if
+    if (allocated(corrXB))then
+      call corrXB%updateCoords(coord, species)
     end if
     if (allocated(thirdOrd)) then
       call thirdOrd%updateCoords(neighbourList, species)

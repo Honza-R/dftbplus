@@ -53,6 +53,7 @@ module initprogram
   use nonscc
   use scc
   use h5correction
+  use xbondcorrection
   use sccinit
   use slakocont
   use repcont
@@ -646,6 +647,9 @@ module initprogram
   !> dispersion data and calculations
   class(DispersionIface), allocatable :: dispersion
 
+  ! X-bond correction - object providing calculation, allocated only when correction is used
+  type(XBCorr), allocatable :: pXBCorrection
+
   !> Can stress be calculated? - start by assuming it can
   logical :: tStress = .true.
 
@@ -853,6 +857,8 @@ contains
 
     ! H5 correction
     type(H5Corr), allocatable :: pH5Correction
+
+    ! H-H repulsion correction for D3
     logical :: tHHRepulsion
 
     character(lc) :: tmpStr
@@ -1137,6 +1143,12 @@ contains
         call H5Corr_init(pH5Correction, speciesName, input%ctrl%h5RScale, input%ctrl%h5WScale,&
             & input%ctrl%h5ElementPara)
         sccInp%h5Correction = pH5Correction
+      end if
+
+      ! X-bond correction
+      if (input%ctrl%xBondCorrSwitchedOn) then
+        allocate(pXBCorrection)
+        call XBCorr_init(pXBCorrection, speciesName)
       end if
 
       nExtChrg = input%ctrl%nExtChrg

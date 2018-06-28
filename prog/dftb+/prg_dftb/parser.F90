@@ -1415,7 +1415,10 @@ contains
         call getChildValue(node, "EwaldTolerance", ctrl%tolEwald, 1.0e-9_dp)
       end if
 
+      ! H-bond correction input
       call readHBondCorrection(node, geo, ctrl)
+      ! X-bond correction input
+      call readXBondCorrection(node, geo, ctrl)
 
       ! spin
       call getChildValue(node, "SpinPolarisation", value, "", child=child, &
@@ -2213,6 +2216,36 @@ contains
 
   end subroutine readHBondCorrection
 
+  !> Reads the X-bond correction.
+  subroutine readXBondCorrection(node, geo, ctrl)
+
+    !> Node containing the h-bond correction sub-block.
+    type(fnode), pointer, intent(in) :: node
+
+    !> Geometry.
+    type(TGeometry), intent(in) :: geo
+
+    !> Control structure
+    type(control), intent(inout) :: ctrl
+
+    type(string) :: buffer
+    type(fnode), pointer :: value, child
+
+    ctrl%xBondCorrSwitchedOn = .false.
+    call getChildValue(node, "XBondCorrection", value, "None", child=child)
+    call getNodeName(value, buffer)
+    select case (char(buffer))
+    case ("none")
+      ! nothing to do
+    case ("dftb3x")
+      ! Switch the correction on
+      ctrl%xBondCorrSwitchedOn = .true.
+    case default
+      call getNodeHSDName(value, buffer)
+      call detailedError(child, "Invalid XBondCorrection '" // char(buffer) // "'")
+    end select
+
+  end subroutine readXBondCorrection
 
   !> Reads Slater-Koster files
   !> Should be replaced with a more sophisticated routine, once the new SK-format has been
