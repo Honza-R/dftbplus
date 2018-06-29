@@ -15,7 +15,6 @@ module xbondcorrection
   use constants
   use vdwdata
   use io
-  use message, only : warning
   implicit none
   private
 
@@ -138,9 +137,9 @@ contains
     !> Species of atoms
     integer, allocatable, intent(in) :: species(:)
 
-    integer :: nAtom, i, j, k
-    real(dp) :: vect(3), r, r_vdw, energy, r0, r1, sw, x, d, erep, erep0
-    real(dp) :: dsw_dr, de_dr, cart_deriv(3)
+    integer :: nAtom, i, j
+    real(dp) :: vect(3), r, rVDW, energy, r0, r1, sw, x, d, eRep, eRep0
+    real(dp) :: dSwdR, dEdR, cartDeriv(3)
 
     ! Get no. of atoms
     nAtom = size(coords, dim=2)
@@ -163,10 +162,10 @@ contains
         vect(:) = coords(:,i) - coords(:,j)
         r = sqrt(sum(vect**2))
         ! Sum of vdW radii
-        r_vdw = this%xbSpeciesRadii(species(i)) + this%xbSpeciesRadii(species(j))
+        rVDW = this%xbSpeciesRadii(species(i)) + this%xbSpeciesRadii(species(j))
         ! Switching function
-        r0 = xbRCut0 * r_vdw
-        r1 = xbRCut1 * r_vdw
+        r0 = xbRCut0 * rVDW
+        r1 = xbRCut1 * rVDW
         if (r <= r0) then
           sw = 0.0_dp
         else if (r >= r1) then
@@ -177,32 +176,31 @@ contains
         end if
         ! Calculate current and cutoff values
         d = this%xbPairParams(species(i),species(j))
-        erep = xbGlobalC1 * exp(-xbGlobalC2 * (r - d)**xbGlobalC3)
-        erep0 = xbGlobalC1 * exp(-xbGlobalC2 * (r0 - d)**xbGlobalC3)
+        eRep = xbGlobalC1 * exp(-xbGlobalC2 * (r - d)**xbGlobalC3)
+        eRep0 = xbGlobalC1 * exp(-xbGlobalC2 * (r0 - d)**xbGlobalC3)
         ! Apply the switching function
-        erep = erep * sw + erep0 * (1.0_dp - sw)
-        energy = energy + erep
+        eRep = eRep * sw + eRep0 * (1.0_dp - sw)
+        energy = energy + eRep
 
         ! Gradient
-        dsw_dr = 0.0_dp
+        dSwdR = 0.0_dp
         if (r > r0 .and. r < r1) then
-          dsw_dr = -140.0_dp * x**6 + 420.0_dp * x**5 - 420.0_dp * x**4 + 140.0_dp * x**3
+          dSwdR = -140.0_dp * x**6 + 420.0_dp * x**5 - 420.0_dp * x**4 + 140.0_dp * x**3
+          dSwdR = dSwdR / (r1 - r0)
         end if
-        de_dr = -1.0_dp * xbGlobalC2 * xbGlobalC3 * (r - d)**(xbGlobalC3 - 1.0_dp) * erep
-        de_dr = sw * de_dr + dsw_dr * erep + dsw_dr * erep0
+        dEdR = -1.0_dp * xbGlobalC2 * xbGlobalC3 * (r - d)**(xbGlobalC3 - 1.0_dp) * eRep
+        dEdR = sw * dEdR + dSwdR * eRep - dSwdR * eRep0
         ! Convert gradient co cartesian and add it to the complete gradient
-        cart_deriv = vect * (de_dr/r)
-        do k = 1, 3
-          this%xbDerivs(k,i) = this%xbDerivs(k,i) + cart_deriv(k)
-          this%xbDerivs(k,j) = this%xbDerivs(k,j) - cart_deriv(k)
-        end do
+        cartDeriv = vect * (dEdR/r)
+        this%xbDerivs(:,i) = this%xbDerivs(:,i) + cartDeriv
+        this%xbDerivs(:,j) = this%xbDerivs(:,j) - cartDeriv
       end do
     end do
     ! Save calculated energy
     this%xbEnergy = energy
   end subroutine updateCoords
 
-  !> Get the calculated energy and apply it to the results
+  !> Add the energy to the main result
   subroutine calcXBEnergy(this, energy)
     !> instance of the correction
     class(XBCorr), intent(inout) :: this
@@ -213,6 +211,7 @@ contains
     energy = energy + this%xbEnergy
   end subroutine calcXBEnergy
 
+  !> Add the correction gradient to the main one
   subroutine addGradients(this, derivs)
     !> instance of the correction
     class(XBCorr), intent(inout) :: this
