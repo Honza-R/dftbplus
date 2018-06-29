@@ -178,9 +178,8 @@ contains
         d = this%xbPairParams(species(i),species(j))
         eRep = xbGlobalC1 * exp(-xbGlobalC2 * (r - d)**xbGlobalC3)
         eRep0 = xbGlobalC1 * exp(-xbGlobalC2 * (r0 - d)**xbGlobalC3)
-        ! Apply the switching function
-        eRep = eRep * sw + eRep0 * (1.0_dp - sw)
-        energy = energy + eRep
+        ! Apply the switching function and add to the energy
+        energy = energy + (eRep * sw + eRep0 * (1.0_dp - sw))
 
         ! Gradient
         dSwdR = 0.0_dp
